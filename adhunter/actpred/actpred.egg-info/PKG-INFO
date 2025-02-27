@@ -1,0 +1,17 @@
+Metadata-Version: 2.2
+Name: actpred
+Version: 0.1
+Summary: TODO
+Author: Hunter Nisonoff
+Author-email: hunter_nisonoff@berkeley.edu
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description-content-type
+Dynamic: requires-python
+Dynamic: summary
