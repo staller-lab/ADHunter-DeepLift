@@ -50,6 +50,10 @@ def get_stratified_split(X,
         enc.fit(X)
         X_train_one_hot, X_val_one_hot, X_test_one_hot = map(
             enc.transform, (X_train, X_val, X_test))
+        # Convert to dense arrays
+        X_train_one_hot = X_train_one_hot.toarray().astype(np.float32)
+        X_val_one_hot = X_val_one_hot.toarray().astype(np.float32)
+        X_test_one_hot = X_test_one_hot.toarray().astype(np.float32)        
 
         if as_tensor:
             X_train = torch.tensor(X_train)
