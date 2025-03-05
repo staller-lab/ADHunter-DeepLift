@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+import torch.nn.functional as Fun
 from torchmetrics import MeanSquaredError, PearsonCorrCoef, SpearmanCorrCoef
 
 
@@ -95,10 +96,10 @@ class ActCNN(nn.Module):
                  num_res_blocks=3,
                  seq_len=40):
         super(ActCNN, self).__init__()
-        self.emb = nn.Embedding(20, embedding_dim=hidden)
+        self.emb = nn.Embedding(20, embedding_dim=hidden, dtype=torch.float32)
         self.conv_init = nn.Conv1d(in_channels=hidden,
-                                   out_channels=hidden,
                                    kernel_size=kernel_size,
+                                   out_channels=hidden,
                                    padding="same")
         self.res_blocks = nn.ModuleList([
             ResBlock(hidden, kernel_size, dilation)
@@ -176,6 +177,19 @@ class ActCNNSystem(pl.LightningModule):
             metric_name = "train_" + metric_name
             self.log(metric_name, metric(y_preds, y_targets))
         return
+    
+    # def on_train_epoch_end(self, train_step_outputs):
+    #     # Same as above, just renamed for PyTorch Lightning v2.0.0
+    #     y_preds = [d['y_pred'] for d in train_step_outputs]
+    #     y_targets = [d['y_target'] for d in train_step_outputs]
+    #     y_preds = torch.concat(y_preds)
+    #     y_targets = torch.concat(y_targets)
+
+    #     train_loss = self.metrics['rmse'](y_preds, y_targets)
+    #     for metric_name, metric in self.metrics.items():
+    #         metric_name = "train_" + metric_name
+    #         self.log(metric_name, metric(y_preds, y_targets))
+    #     return
 
     def validation_step(self, batch, batch_idx):
         X, y = batch
@@ -195,14 +209,80 @@ class ActCNNSystem(pl.LightningModule):
             self.log(metric_name, metric(y_preds, y_targets))
         return val_loss
 
+    # def on_validation_epoch_end(self, val_step_outputs=None):
+    #     if not val_step_outputs:
+    #         return
+    #     # Same as above, just renamed for PyTorch Lightning v2.0.0
+    #     y_preds, y_targets = zip(*val_step_outputs)
+    #     y_preds = torch.concat(y_preds)
+    #     y_targets = torch.concat(y_targets)
 
-class PaddleCNNSystem(pl.LightningModule):
+    #     val_loss = self.metrics['rmse'](y_preds, y_targets)
+    #     self.log("val_loss", val_loss)
+    #     for metric_name, metric in self.metrics.items():
+    #         metric_name = "val_" + metric_name
+    #         print(metric_name, metric(y_preds, y_targets).item(), flush=True)
+    #         self.log(metric_name, metric(y_preds, y_targets))
+    #     return val_loss
 
-    def __init__(self, weight_decay=1e-3):
-        super(PaddleCNNSystem, self).__init__()
+class ActCNNOneHot(nn.Module):
+    """ADHunter model class. Similar to ActCNN, but with explicit 
+    one-hot encoding fed into a linear layer to facilitate 
+    interpretability.
+    """
+    def __init__(self,
+                 hidden,
+                 kernel_size,
+                 dilation,
+                 num_res_blocks=3,
+                 seq_len=40):
+        super(ActCNNOneHot, self).__init__()
+        # self.enc = OneHotEncoder()
+        self.emb = nn.Linear(20, hidden, bias=False)
+        # self.emb = nn.Embedding(20, embedding_dim=hidden, dtype=torch.float32)
+        self.conv_init = nn.Conv1d(in_channels=hidden,
+                                   kernel_size=kernel_size,
+                                   out_channels=hidden,
+                                   padding="same")
+        self.res_blocks = nn.ModuleList([
+            ResBlock(hidden, kernel_size, dilation)
+            for _ in range(num_res_blocks)
+        ])
+        self.pool = nn.MaxPool1d(kernel_size=seq_len)
+        self.lin = nn.Linear(hidden, 1)
+
+    def forward(self, X):
+        # enc = self.enc.fit(X)
+        # X = torch.tensor(enc.transform(X).toarray(), device=self.device)
+        X = Fun.one_hot(X, num_classes=20).float()
+        out = self.emb(X)
+        out = out.transpose(2, 1)
+        out = self.conv_init(out)
+        for res_block in self.res_blocks:
+            out = res_block(out)
+        out = self.pool(out).squeeze()
+        out = self.lin(out)
+        return out
+
+
+class ActCNNOneHotSystem(pl.LightningModule):
+    """Wrapper for ActCNNOneHot model.
+    """
+    def __init__(self,
+                 hidden,
+                 kernel_size,
+                 dilation,
+                 num_res_blocks=3,
+                 seq_len=40,
+                 weight_decay=1e-2):
+        super(ActCNNOneHotSystem, self).__init__()
         self.save_hyperparameters()
         self.wd = weight_decay
-        self.model = PaddleCNN()
+        self.model = ActCNNOneHot(hidden,
+                            kernel_size,
+                            dilation,
+                            seq_len=seq_len,
+                            num_res_blocks=num_res_blocks)
         self.loss_fn = nn.MSELoss()
 
         self.rmse = MeanSquaredError(squared=False)
@@ -262,3 +342,97 @@ class PaddleCNNSystem(pl.LightningModule):
             print(metric_name, metric(y_preds, y_targets).item(), flush=True)
             self.log(metric_name, metric(y_preds, y_targets))
         return val_loss
+
+class PaddleCNNSystem(pl.LightningModule):
+
+    def __init__(self, weight_decay=1e-3):
+        super(PaddleCNNSystem, self).__init__()
+        self.save_hyperparameters()
+        self.wd = weight_decay
+        self.model = PaddleCNN()
+        self.loss_fn = nn.MSELoss()
+
+        self.rmse = MeanSquaredError(squared=False)
+        self.pearsonr = PearsonCorrCoef()
+        self.spearmanr = SpearmanCorrCoef()
+        self.metrics = {
+            "rmse": self.rmse,
+            "pearsonr": self.pearsonr,
+            "spearmanr": self.spearmanr
+        }
+
+    def forward(self, x):
+        return self.model(x)
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(),
+                                     lr=1e-3,
+                                     weight_decay=self.wd)
+        return optimizer
+
+    def training_step(self, batch, batch_idx):
+        X, y = batch
+        y_pred = self.model(X)
+        loss = self.loss_fn(y_pred, y)
+        return {
+            "loss": loss,
+            "y_target": y.view(-1),
+            "y_pred": y_pred.detach().view(-1),
+        }
+
+    def training_epoch_end(self, train_step_outputs):
+        y_preds = [d['y_pred'] for d in train_step_outputs]
+        y_targets = [d['y_target'] for d in train_step_outputs]
+        y_preds = torch.concat(y_preds)
+        y_targets = torch.concat(y_targets)
+
+        train_loss = self.metrics['rmse'](y_preds, y_targets)
+        for metric_name, metric in self.metrics.items():
+            metric_name = "train_" + metric_name
+            self.log(metric_name, metric(y_preds, y_targets))
+        return
+    
+    # def on_train_epoch_end(self, train_step_outputs):
+    #     # Same as above, just renamed for PyTorch Lightning v2.0.0
+    #     y_preds = [d['y_pred'] for d in train_step_outputs]
+    #     y_targets = [d['y_target'] for d in train_step_outputs]
+    #     y_preds = torch.concat(y_preds)
+    #     y_targets = torch.concat(y_targets)
+
+    #     train_loss = self.metrics['rmse'](y_preds, y_targets)
+    #     for metric_name, metric in self.metrics.items():
+    #         metric_name = "train_" + metric_name
+    #         self.log(metric_name, metric(y_preds, y_targets))
+    #     return
+
+    def validation_step(self, batch, batch_idx):
+        X, y = batch
+        y_pred = self.model(X)
+        return (y_pred.view(-1), y.view(-1))
+
+    def validation_epoch_end(self, val_step_outputs):
+        y_preds, y_targets = zip(*val_step_outputs)
+        y_preds = torch.concat(y_preds)
+        y_targets = torch.concat(y_targets)
+
+        val_loss = self.metrics['rmse'](y_preds, y_targets)
+        self.log("val_loss", val_loss)
+        for metric_name, metric in self.metrics.items():
+            metric_name = "val_" + metric_name
+            print(metric_name, metric(y_preds, y_targets).item(), flush=True)
+            self.log(metric_name, metric(y_preds, y_targets))
+        return val_loss
+    
+    # def on_validation_epoch_end(self, val_step_outputs):
+    #     # Same as above, just renamed for PyTorch Lightning v2.0.0
+    #     y_preds, y_targets = zip(*val_step_outputs)
+    #     y_preds = torch.concat(y_preds)
+    #     y_targets = torch.concat(y_targets)
+
+    #     val_loss = self.metrics['rmse'](y_preds, y_targets)
+    #     self.log("val_loss", val_loss)
+    #     for metric_name, metric in self.metrics.items():
+    #         metric_name = "val_" + metric_name
+    #         print(metric_name, metric(y_preds, y_targets).item(), flush=True)
+    #         self.log(metric_name, metric(y_preds, y_targets))
+    #     return val_loss
