@@ -2,6 +2,8 @@ processed-data
 # data
 misc
 models
+adhunter/actpred/build
+adhunter/actpred/actpred/__pycache__
 
 *.onnx
 *.pyc
