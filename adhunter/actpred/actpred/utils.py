@@ -88,7 +88,8 @@ def get_stratified_split(X,
             y_cont_test = torch.tensor(y_cont_test)
         return (X_train, y_bin_train, y_cont_train), \
             (X_val, y_bin_val, y_cont_val), \
-            (X_test, y_bin_test, y_cont_test)
+            (X_test, y_bin_test, y_cont_test), \
+            (val_index, test_index)
 
 
 class EmacsProgressBar(TQDMProgressBar):
