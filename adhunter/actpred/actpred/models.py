@@ -94,9 +94,14 @@ class ActCNN(nn.Module):
                  kernel_size,
                  dilation,
                  num_res_blocks=3,
-                 seq_len=40):
+                 seq_len=40,
+                 one_hot=True):
         super(ActCNN, self).__init__()
-        self.emb = nn.Embedding(20, embedding_dim=hidden, dtype=torch.float32)
+        self.one_hot_explicit = one_hot
+        if self.one_hot_explicit:
+            self.emb = nn.Linear(20, hidden, bias=False)
+        else:
+            self.emb = nn.Embedding(20, embedding_dim=hidden, dtype=torch.float32)
         self.conv_init = nn.Conv1d(in_channels=hidden,
                                    kernel_size=kernel_size,
                                    out_channels=hidden,
@@ -109,6 +114,8 @@ class ActCNN(nn.Module):
         self.lin = nn.Linear(hidden, 1)
 
     def forward(self, X):
+        if self.one_hot_explicit:
+            X = self.one_hot_custom(X, num_classes=20).float()
         out = self.emb(X)
         out = out.transpose(2, 1)
         out = self.conv_init(out)
@@ -116,6 +123,32 @@ class ActCNN(nn.Module):
             out = res_block(out)
         out = self.pool(out).squeeze()
         out = self.lin(out)
+        return out
+    
+    def one_hot_custom(self, arr, num_classes:int):
+        """Custom one hot encoding to allow encoding invalid indices 
+        as all 0 vectors.
+
+        Args:
+            arr (torch.tensor): Array of token indices corresponding to desired one hot index. 
+                Input value >= num_classes to encode all 0's.
+            num_classes (int): _description_
+
+        Returns:
+            torch.tensor: one hot encoded array
+        """        
+        valid_mask = (arr >=0) & (arr < num_classes)
+        if valid_mask.all():
+            out = Fun.one_hot(arr, num_classes=num_classes)
+        else:
+            classes = range(num_classes)
+            rows, cols = arr.shape
+            out = torch.zeros((rows, cols, num_classes))
+            for i in range(rows):
+                for j in range(cols):
+                    if arr[i, j] in classes:
+                        out[i, j, arr[i, j]] = 1
+                    out[i, j] = torch.zeros(num_classes)
         return out
 
 
@@ -127,7 +160,8 @@ class ActCNNSystem(pl.LightningModule):
                  dilation,
                  num_res_blocks=3,
                  seq_len=40,
-                 weight_decay=1e-2):
+                 weight_decay=1e-2,
+                 one_hot=True):
         super(ActCNNSystem, self).__init__()
         self.save_hyperparameters()
         self.wd = weight_decay
@@ -135,7 +169,8 @@ class ActCNNSystem(pl.LightningModule):
                             kernel_size,
                             dilation,
                             seq_len=seq_len,
-                            num_res_blocks=num_res_blocks)
+                            num_res_blocks=num_res_blocks,
+                            one_hot=one_hot)
         self.loss_fn = nn.MSELoss()
 
         self.rmse = MeanSquaredError(squared=False)
@@ -177,19 +212,6 @@ class ActCNNSystem(pl.LightningModule):
             metric_name = "train_" + metric_name
             self.log(metric_name, metric(y_preds, y_targets))
         return
-    
-    # def on_train_epoch_end(self, train_step_outputs):
-    #     # Same as above, just renamed for PyTorch Lightning v2.0.0
-    #     y_preds = [d['y_pred'] for d in train_step_outputs]
-    #     y_targets = [d['y_target'] for d in train_step_outputs]
-    #     y_preds = torch.concat(y_preds)
-    #     y_targets = torch.concat(y_targets)
-
-    #     train_loss = self.metrics['rmse'](y_preds, y_targets)
-    #     for metric_name, metric in self.metrics.items():
-    #         metric_name = "train_" + metric_name
-    #         self.log(metric_name, metric(y_preds, y_targets))
-    #     return
 
     def validation_step(self, batch, batch_idx):
         X, y = batch
@@ -208,23 +230,8 @@ class ActCNNSystem(pl.LightningModule):
             print(metric_name, metric(y_preds, y_targets).item(), flush=True)
             self.log(metric_name, metric(y_preds, y_targets))
         return val_loss
-
-    # def on_validation_epoch_end(self, val_step_outputs=None):
-    #     if not val_step_outputs:
-    #         return
-    #     # Same as above, just renamed for PyTorch Lightning v2.0.0
-    #     y_preds, y_targets = zip(*val_step_outputs)
-    #     y_preds = torch.concat(y_preds)
-    #     y_targets = torch.concat(y_targets)
-
-    #     val_loss = self.metrics['rmse'](y_preds, y_targets)
-    #     self.log("val_loss", val_loss)
-    #     for metric_name, metric in self.metrics.items():
-    #         metric_name = "val_" + metric_name
-    #         print(metric_name, metric(y_preds, y_targets).item(), flush=True)
-    #         self.log(metric_name, metric(y_preds, y_targets))
-    #     return val_loss
-
+    
+    
 class ActCNNOneHot(nn.Module):
     """ADHunter model class. Similar to ActCNN, but with explicit 
     one-hot encoding fed into a linear layer to facilitate 
@@ -237,9 +244,7 @@ class ActCNNOneHot(nn.Module):
                  num_res_blocks=3,
                  seq_len=40):
         super(ActCNNOneHot, self).__init__()
-        # self.enc = OneHotEncoder()
         self.emb = nn.Linear(20, hidden, bias=False)
-        # self.emb = nn.Embedding(20, embedding_dim=hidden, dtype=torch.float32)
         self.conv_init = nn.Conv1d(in_channels=hidden,
                                    kernel_size=kernel_size,
                                    out_channels=hidden,
@@ -252,9 +257,8 @@ class ActCNNOneHot(nn.Module):
         self.lin = nn.Linear(hidden, 1)
 
     def forward(self, X):
-        # enc = self.enc.fit(X)
-        # X = torch.tensor(enc.transform(X).toarray(), device=self.device)
-        X = Fun.one_hot(X, num_classes=20).float()
+        # X = Fun.one_hot(X, num_classes=20).float()
+        X = self.one_hot_custom(X, num_classes=20).float()
         out = self.emb(X)
         out = out.transpose(2, 1)
         out = self.conv_init(out)
@@ -262,6 +266,32 @@ class ActCNNOneHot(nn.Module):
             out = res_block(out)
         out = self.pool(out).squeeze()
         out = self.lin(out)
+        return out
+    
+    def one_hot_custom(self, arr, num_classes:int):
+        """Custom one hot encoding to allow encoding invalid indices 
+        as all 0 vectors.
+
+        Args:
+            arr (torch.tensor): Array of token indices corresponding to desired one hot index. 
+                Input value >= num_classes to encode all 0's.
+            num_classes (int): _description_
+
+        Returns:
+            torch.tensor: one hot encoded array
+        """        
+        valid_mask = (arr >=0) & (arr < num_classes)
+        if valid_mask.all():
+            out = Fun.one_hot(arr, num_classes=num_classes)
+        else:
+            classes = range(num_classes)
+            rows, cols = arr.shape
+            out = torch.zeros((rows, cols, num_classes))
+            for i in range(rows):
+                for j in range(cols):
+                    if arr[i, j] in classes:
+                        out[i, j, arr[i, j]] = 1
+                    out[i, j] = torch.zeros(num_classes)
         return out
 
 
