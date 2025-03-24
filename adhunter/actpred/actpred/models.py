@@ -115,7 +115,7 @@ class ActCNN(nn.Module):
 
     def forward(self, X):
         if self.one_hot_explicit:
-            X = self.one_hot_custom(X, num_classes=20).float()
+            X = self.encode(X).float()
         out = self.emb(X)
         out = out.transpose(2, 1)
         out = self.conv_init(out)
@@ -150,7 +150,23 @@ class ActCNN(nn.Module):
                         out[i, j, arr[i, j]] = 1
                     out[i, j] = torch.zeros(num_classes)
         return out
-
+    
+    def encode(self, seq):
+        seq_len, n_aas = 40, 20
+        if type(seq) == torch.Tensor:
+            if seq.shape[-1] == n_aas:
+                # Do nothing if already proper shape for one hot encoded
+                return seq.float()
+            elif seq.shape[-1] == seq_len:
+                # One hot encode if seq is a list of integer tokens of AAs
+                seq = self.one_hot_custom(seq, num_classes=n_aas)
+                return seq.float()
+        elif type(seq) == str:
+            alphabet="ACDEFGHIKLMNPQRSTVWY"
+            aa_to_i = {aa:i for i, aa in enumerate(alphabet)}
+            assert len(seq) == seq_len, f"Sequence must be seq_len AA!"
+            seq = self.one_hot_custom(torch.tensor([[aa_to_i[i] for i in seq]], dtype=torch.int64), num_classes=n_aas)
+            return seq.float()
 
 class ActCNNSystem(pl.LightningModule):
 
