@@ -103,7 +103,39 @@ def main():
     attr_scaled = attr * np.abs(dx)
     attr_dfs = [get_df(i) for i in attr_scaled]
     # Make logo plots!
-    ylabel="$m_{i}|\Delta{x_i}|$"
+    ylabel="Contribution"
+    # Make a (colorblind-friendly) colormap
+    basics_color, acidics_color, hydrophobics_color, aro_color = [
+        sns.color_palette("colorblind")[0], 
+        # sns.color_palette("colorblind")[3], 
+        "#e41a1c",
+        sns.color_palette("colorblind")[-2], 
+        sns.color_palette("colorblind")[2]]
+    other_color = 'grey'
+
+    color_scheme = {
+            'A': other_color,
+            'C': other_color,
+            'D': acidics_color,
+            'E': acidics_color,
+            'F': aro_color,
+            'G': other_color,
+            'H': basics_color,
+            'I': hydrophobics_color,
+            'K': basics_color,
+            'L': hydrophobics_color,
+            'M': hydrophobics_color,
+            'N': other_color,
+            'P': other_color,
+            'Q': other_color,
+            'R': basics_color,
+            'S': other_color,
+            'T': other_color,
+            'V': hydrophobics_color,
+            'W': aro_color,
+            'Y': aro_color
+        }
+
     seqs_plotted = []
     for i in range(len(attr_dfs)):
         # species_i=top_ad_species[i]
@@ -112,7 +144,9 @@ def main():
             seq_df_i= get_df(
                 model.model.encode(seq_i).squeeze().detach().numpy())
             attr_i = attr_dfs[i].T
-            fig, axs = logo_plot(attr_df=attr_i, seq_df=seq_df_i, ylabel=ylabel)
+            fig, axs = logo_plot(
+                attr_df=attr_i, seq_df=seq_df_i, ylabel=ylabel,
+                color_scheme=color_scheme)
             fig.savefig(f"../data/logo_plots/null_baseline/{seq_i}.png", transparent=False)
             # fig, axs = logo_plot(attr_df=attr_i, seq_df=seq_df_i, ylabel=ylabel, title=species_i)
             # fig.savefig(f"../data/logo_plots/{seq_i}_{species_i}.png", transparent=False)
