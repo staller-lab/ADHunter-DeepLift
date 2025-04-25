@@ -1,13 +1,18 @@
 processed-data
-# data
 misc
 models
 adhunter/actpred/build
 adhunter/actpred/actpred/__pycache__
 
+# General files to ignore
 *.onnx
 *.pyc
 *.py~
 __pycache__
 .DS_Store
 logs
+
+# data
+rawdata_normalized_20250326.csv
+tsne-clustering_6clusters.csv
+
