@@ -1,5 +1,11 @@
 """
 Script to use ADHunter + in silico mutagenesis to create ~optimal ADs
+Example usage:
+    python mutagenesis.py \
+        -o ../data/mutagenesis/random \
+        -m ../adhunter/adhunter_1he.pt \
+        -n 20 \
+        --mode random
 """
 import torch
 import pandas as pd
@@ -92,7 +98,7 @@ if __name__ == "__main__":
         help="Number of iterations for mutagenesis"
     )
     parser.add_argument(
-        '-s', '--seed', type=int, required=True, default=42,
+        '-s', '--seed', type=int, default=42,
         help="Random seed for mutagenesis"
     )
     parser.add_argument(
@@ -149,11 +155,16 @@ if __name__ == "__main__":
     plt.ylabel("Activity")
     plt.xlabel("Iteration")
     plt.tight_layout()
-    plt.savefig(os.path.join(args.output, f"{model_name}_mutagenesis.png"))
+    plt.savefig(
+        os.path.join(args.output, 
+                     f"{model_name}_iter{args.n_iter}_mutagenesis.png"))
     
     plt.close()
 
     result_df = pd.DataFrame(
         np.vstack([seqs_initial, initial_activations, seqs_final, scores]).T)
-    result_df.columns = ["initial_seq", "initial_activity","final_seq", "activity"]
-    result_df.to_csv(os.path.join(args.output, f"{model_name}_mutagenesis.csv"))
+    result_df.columns = ["initial_seq", "initial_activity",
+                         "final_seq", "activity"]
+    result_df.to_csv(
+        os.path.join(args.output, 
+                     f"{model_name}_iter{args.n_iter}_mutagenesis.csv"))
