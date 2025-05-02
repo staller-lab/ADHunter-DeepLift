@@ -3,6 +3,7 @@ misc
 models
 adhunter/actpred/build
 adhunter/actpred/actpred/__pycache__
+html
 
 # General files to ignore
 *.onnx
