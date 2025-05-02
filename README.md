@@ -1,4 +1,11 @@
 # staller-rotation
+This contains all the scripts, notebooks, and data I used/made in the course of
+my rotation in the Staller lab. My project was mainly focused on using DeepLIFT
+to interpret ADhunter, a model to predict if a given 40aa protein sequence
+can function as a transcriptional activation domain. Analysis showed that 
+generally ADhunter considers the amino acids we expect to be important to be
+important (namely: bulky aromatics/hydrophobics in general and acidics).
+
 
 ## notebooks 
 - `250304_ADHunter_explicit1he.ipynb`: Notebook where I made the `adhunter_1he.pt` model that I used for most subsequent analysis. This involved slightly modifying the ADhunter architecture by replacing the initial `nn.Embedding` layer with manual one-hot encoding and a `nn.Linear` layer to enable interpretation via DeepLIFT of the contributions from the one-hot input. `NOTE:` The model tweaks are all implemented in `../adhunter/actpred/actpred/models.py` and thus in my install of ADhunter, so subsequent notebooks just import the installed ADhunter. 
